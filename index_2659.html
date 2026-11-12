@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Multiplication Chart</title>
+<style>
+  /* Layout: one centered square 15x15 chart under a short readout line.
+     Single look by choice: cream page, dark gray text, soft pastels and Verdana for easier reading. */
+  :root {
+    --ink: #333333;
+    --muted: #5f5a50;
+    --page-bg: #fbf5e6;
+    --line: #e2d8bf;
+    --head-bg: #ece2c8;
+    --cell-bg: #fffdf6;
+    --ring: #333333;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--page-bg); color: var(--ink);
+    font-family: Verdana, Tahoma, "Trebuchet MS", "Comic Sans MS", sans-serif;
+    letter-spacing: .03em; }
+  body { display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding-block: 10px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+  h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: .2px; }
+  #readout { min-height: 44px; display: flex; align-items: center; justify-content: center;
+    text-align: center; font-size: 18px; line-height: 1.25; color: var(--muted); padding: 0 8px; }
+  #readout b { color: var(--ink); font-size: 24px; }
+  #readout .pair { display: inline-block; color: var(--ink);
+    border-radius: 8px; padding: 2px 8px; margin: 2px 3px; font-weight: 600; }
+
+  #grid {
+    --size: min(100%, calc(100vh - 170px));
+    width: var(--size); height: var(--size);
+    aspect-ratio: 1 / 1; max-width: 100%;
+    display: grid; grid-template-columns: repeat(16, 1fr); grid-template-rows: repeat(16, 1fr);
+    gap: 3px; font-size: clamp(7px, calc(var(--size) / 16 * 0.34), 20px);
+  }
+  .c { display: flex; align-items: center; justify-content: center; border-radius: 6px;
+    background: var(--cell-bg); border: 1px solid var(--line); font-weight: 600;
+    font-variant-numeric: tabular-nums; cursor: pointer; transition: background-color .12s; }
+  .h { background: var(--head-bg); color: var(--ink); font-weight: 700; cursor: default; border-color: transparent; }
+  .corner { background: transparent; border-color: transparent; color: var(--muted); font-weight: 600; }
+  .c.picked { box-shadow: inset 0 0 0 3px var(--ring); }
+  .hint { font-size: 14px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+  <h1>Multiplication Chart</h1>
+  <div id="readout"><span class="hint">Tap any number to find every place it shows up.</span></div>
+  <div id="grid" role="grid" aria-label="Multiplication chart"></div>
+
+<script>
+(function () {
+  var N = 15;
+  // One hue per instance of the tapped product (blue first). Soft pastels, spread apart
+  // so neighbors are easy to tell apart (no red/green pairing back to back).
+  var HUES = [210, 35, 275, 170, 335, 55, 100, 15];
+  function strong(h) { return 'hsl(' + h + ', 70%, 80%)'; }
+  function light(h)  { return 'hsl(' + h + ', 70%, 91%)'; }
+
+  var grid = document.getElementById('grid');
+  var readout = document.getElementById('readout');
+  var cells = [];
+  var colHeads = {};
+  var rowHeads = {};
+  var selected = null;
+
+  function el(cls, text) {
+    var d = document.createElement('div');
+    d.className = cls;
+    if (text !== undefined) d.textContent = text;
+    return d;
+  }
+
+  grid.appendChild(el('c corner', '×'));
+  for (var j = 1; j <= N; j++) {
+    var ch = el('c h', j);
+    colHeads[j] = ch;
+    grid.appendChild(ch);
+  }
+
+  for (var i = 1; i <= N; i++) {
+    var rh = el('c h', i);
+    rowHeads[i] = rh;
+    grid.appendChild(rh);
+    for (var k = 1; k <= N; k++) {
+      var c = el('c', i * k);
+      c.dataset.p = i * k;
+      c.dataset.r = i;
+      c.dataset.c = k;
+      c.setAttribute('role', 'gridcell');
+      cells.push(c);
+      grid.appendChild(c);
+    }
+  }
+
+  function render() {
+    // Find each instance of the selected product (row-major order) and give it a hue.
+    var instances = [];
+    var rowHue = {}, colHue = {}, cellHue = {}, rowEnd = {}, colEnd = {};
+    if (selected !== null) {
+      for (var m = 0; m < cells.length; m++) {
+        if (Number(cells[m].dataset.p) === selected.p) {
+          var hue = HUES[instances.length % HUES.length];
+          var r = Number(cells[m].dataset.r), c = Number(cells[m].dataset.c);
+          instances.push({ r: r, c: c, hue: hue });
+          rowHue[r] = hue;
+          colHue[c] = hue;
+          rowEnd[r] = c;
+          colEnd[c] = r;
+          cellHue[r + ',' + c] = hue;
+        }
+      }
+    }
+
+    for (var n = 0; n < cells.length; n++) {
+      var cell = cells[n];
+      var rr = Number(cell.dataset.r), cc = Number(cell.dataset.c);
+      var own = cellHue[rr + ',' + cc];
+      // Only color the stretch of the row/column that leads from the edge up to the product.
+      var rh2 = (rowHue[rr] !== undefined && cc < rowEnd[rr]) ? rowHue[rr] : undefined;
+      var ch2 = (colHue[cc] !== undefined && rr < colEnd[cc]) ? colHue[cc] : undefined;
+      var bg = '';
+      if (own !== undefined) {
+        bg = strong(own);
+      } else if (rh2 !== undefined && ch2 !== undefined && rh2 !== ch2) {
+        // Row path of one instance crosses column path of another: show both colors.
+        bg = 'linear-gradient(135deg, ' + light(rh2) + ' 50%, ' + light(ch2) + ' 50%)';
+      } else if (rh2 !== undefined || ch2 !== undefined) {
+        bg = light(rh2 !== undefined ? rh2 : ch2);
+      }
+      cell.style.background = bg;
+      cell.classList.toggle('picked', own !== undefined && cell === selected.el);
+    }
+
+    for (var x = 1; x <= N; x++) {
+      colHeads[x].style.background = colHue[x] !== undefined ? strong(colHue[x]) : '';
+      rowHeads[x].style.background = rowHue[x] !== undefined ? strong(rowHue[x]) : '';
+    }
+
+    if (selected === null) {
+      readout.innerHTML = '<span class="hint">Tap any number to find every place it shows up.</span>';
+      return;
+    }
+    var html = '<b>' + selected.p + '</b>&nbsp;&nbsp;';
+    html += instances.map(function (q) {
+      return '<span class="pair" style="background:' + strong(q.hue) + '">' + q.r + ' × ' + q.c + '</span>';
+    }).join('');
+    readout.innerHTML = html;
+  }
+
+  grid.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t.dataset || t.dataset.p === undefined) return;
+    var p = Number(t.dataset.p);
+    if (selected && selected.p === p && selected.el === t) {
+      selected = null;
+    } else {
+      selected = { p: p, el: t };
+    }
+    render();
+  });
+})();
+</script>
+</body>
+</html>
